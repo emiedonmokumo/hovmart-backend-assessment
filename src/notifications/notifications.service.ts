@@ -1,8 +1,8 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { PrismaService } from '../common/prisma/prisma.service';
-import { ConfigService } from '@nestjs/config';
 import { CreateNotificationDto } from './dto/notification.dto';
 import { NotificationStatus, NotificationType as PrismaNotificationType } from '@prisma/client';
+import { EmailService } from '../common/services/email.service';
 
 @Injectable()
 export class NotificationsService {
@@ -10,7 +10,7 @@ export class NotificationsService {
 
   constructor(
     private readonly prisma: PrismaService,
-    private readonly configService: ConfigService,
+    private readonly emailService: EmailService,
   ) {}
 
   async create(dto: CreateNotificationDto) {
@@ -112,15 +112,30 @@ export class NotificationsService {
     try {
       this.logger.log(`Sending email to user ${dto.userId}: ${dto.title}`);
 
+      const user = await this.prisma.user.findUnique({
+        where: { id: dto.userId },
+        select: { email: true },
+      });
+
+      if (!user) {
+        throw new Error(`User ${dto.userId} not found`);
+      }
+
+      const sent = await this.emailService.sendEmail({
+        to: user.email,
+        subject: dto.title,
+        text: dto.message,
+      });
+
       await this.prisma.notification.update({
         where: { id: notificationId },
         data: {
-          status: NotificationStatus.SENT,
-          sentAt: new Date(),
+          status: sent ? NotificationStatus.SENT : NotificationStatus.FAILED,
+          sentAt: sent ? new Date() : null,
         },
       });
 
-      return { success: true };
+      return { success: sent };
     } catch (error) {
       this.logger.error('Failed to send email notification', error);
 
