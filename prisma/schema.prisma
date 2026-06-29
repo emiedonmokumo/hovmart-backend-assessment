@@ -1,0 +1,386 @@
+// Prisma Schema for Property Marketplace
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
+}
+
+// ==================== ENUMERATIONS ====================
+
+enum UserRole {
+  USER
+  AGENT
+  ADMIN
+}
+
+enum AgentStatus {
+  PENDING
+  APPROVED
+  REJECTED
+}
+
+enum KycStatus {
+  PENDING
+  UNDER_REVIEW
+  APPROVED
+  REJECTED
+}
+
+enum IdType {
+  NIN
+  DRIVERS_LICENSE
+  PASSPORT
+  VOTERS_CARD
+}
+
+enum PropertyType {
+  APARTMENT
+  DUPLEX
+  LAND
+  OFFICE
+  SHOP
+  SHORTLET
+}
+
+enum PropertyStatus {
+  DRAFT
+  PENDING_REVIEW
+  ACTIVE
+  SOLD
+  RENTED
+}
+
+enum TransactionType {
+  RESERVATION_FEE
+  LISTING_PAYMENT
+  ESCROW_PAYMENT
+}
+
+enum TransactionStatus {
+  PENDING
+  SUCCESSFUL
+  FAILED
+}
+
+enum EscrowStatus {
+  PENDING
+  FUNDED
+  RELEASED
+  REFUNDED
+  DISPUTED
+}
+
+enum NotificationType {
+  EMAIL
+  IN_APP
+  SMS
+}
+
+enum NotificationStatus {
+  PENDING
+  SENT
+  FAILED
+}
+
+// ==================== USER & AUTH ====================
+
+model User {
+  id            String    @id @default(uuid())
+  firstName     String
+  lastName      String
+  email         String    @unique
+  phone         String    @unique
+  password      String
+  profilePhoto  String?
+  role          UserRole  @default(USER)
+  isVerified    Boolean   @default(false)
+  isActive      Boolean   @default(true)
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  // Relations
+  agent         Agent?
+  kyc           Kyc?
+  savedProperties SavedProperty[]
+  transactionsAsBuyer  Transaction[]  @relation("BuyerTransactions")
+  transactionsAsSeller Transaction[]  @relation("SellerTransactions")
+  escrowsAsBuyer   Escrow[]        @relation("BuyerEscrows")
+  escrowsAsSeller  Escrow[]        @relation("SellerEscrows")
+  notifications   Notification[]
+  refreshTokens   RefreshToken[]
+
+  @@index([email])
+  @@index([phone])
+  @@map("users")
+}
+
+model RefreshToken {
+  id        String   @id @default(uuid())
+  token     String   @unique
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+  revoked   Boolean  @default(false)
+
+  @@index([token])
+  @@index([userId])
+  @@map("refresh_tokens")
+}
+
+// ==================== AGENT ====================
+
+model Agent {
+  id                  String        @id @default(uuid())
+  userId              String        @unique
+  user                User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  // Step 1: Basic Profile
+  fullName            String
+  email               String
+  phone               String
+  address             String
+  city                String
+  state               String
+
+  // Step 2: Professional Details
+  yearsOfExperience   Int?
+  companyName         String?
+  specialization      String?
+  cacNumber           String?
+
+  // Step 3: Documents
+  governmentIdUrl     String?
+  passportPhotoUrl    String?
+  utilityBillUrl      String?
+
+  // Status
+  status              AgentStatus   @default(PENDING)
+  reviewedBy          String?
+  reviewedAt          DateTime?
+  rejectionReason     String?
+
+  createdAt           DateTime      @default(now())
+  updatedAt           DateTime      @updatedAt
+
+  // Relations
+  properties          Property[]
+
+  @@index([status])
+  @@map("agents")
+}
+
+// ==================== KYC ====================
+
+model Kyc {
+  id                String      @id @default(uuid())
+  userId            String      @unique
+  user              User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  // Identification
+  nin               String?     @db.VarChar(11)
+  bvn               String?     @db.VarChar(11)
+  idType           IdType?
+  idNumber         String?
+  idDocumentUrl    String?
+
+  // Verification
+  selfieImageUrl   String?
+  proofOfAddressUrl String?
+
+  // Status
+  status           KycStatus   @default(PENDING)
+  reviewedBy       String?
+  reviewedAt       DateTime?
+  rejectionReason  String?
+
+  createdAt        DateTime    @default(now())
+  updatedAt        DateTime    @updatedAt
+
+  @@index([status])
+  @@index([nin])
+  @@index([bvn])
+  @@map("kyc")
+}
+
+// ==================== PROPERTY ====================
+
+model Property {
+  id              String          @id @default(uuid())
+  agentId         String
+  agent           Agent           @relation(fields: [agentId], references: [id], onDelete: Cascade)
+
+  // Basic Info
+  title           String
+  description     String          @db.Text
+  price           Decimal         @db.Decimal(15, 2)
+
+  // Location
+  location        String
+  state           String
+  city            String
+  address         String
+
+  // Details
+  bedrooms        Int?
+  bathrooms      Int?
+  propertyType   PropertyType
+  amenities      String[]
+
+  // Status
+  status         PropertyStatus  @default(DRAFT)
+  isFeatured     Boolean         @default(false)
+  views          Int             @default(0)
+
+  createdAt      DateTime        @default(now())
+  updatedAt      DateTime        @updatedAt
+  publishedAt   DateTime?
+
+  // Relations
+  images         PropertyImage[]
+  savedBy        SavedProperty[]
+  transactions   Transaction[]
+  escrows        Escrow[]
+
+  @@index([status])
+  @@index([propertyType])
+  @@index([state])
+  @@index([city])
+  @@index([price])
+  @@map("properties")
+}
+
+model PropertyImage {
+  id          String    @id @default(uuid())
+  propertyId  String
+  property    Property  @relation(fields: [propertyId], references: [id], onDelete: Cascade)
+  url         String
+  publicId    String
+  isPrimary   Boolean   @default(false)
+  createdAt   DateTime  @default(now())
+
+  @@index([propertyId])
+  @@map("property_images")
+}
+
+model SavedProperty {
+  id          String    @id @default(uuid())
+  userId      String
+  user        User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  propertyId  String
+  property    Property  @relation(fields: [propertyId], references: [id], onDelete: Cascade)
+  createdAt   DateTime  @default(now())
+
+  @@unique([userId, propertyId])
+  @@index([userId])
+  @@map("saved_properties")
+}
+
+// ==================== PAYMENT & ESCROW ====================
+
+model Transaction {
+  id              String            @id @default(uuid())
+  reference       String            @unique
+  buyerId         String
+  buyer           User              @relation("BuyerTransactions", fields: [buyerId], references: [id])
+  sellerId        String?
+  seller          User?             @relation("SellerTransactions", fields: [sellerId], references: [id])
+  propertyId     String?
+  property       Property?         @relation(fields: [propertyId], references: [id], onDelete: SetNull)
+
+  // Transaction Details
+  type           TransactionType
+  amount         Decimal           @db.Decimal(15, 2)
+  currency       String            @default("NGN")
+
+  // Paystack Details
+  paystackRef    String?
+  accessCode     String?
+  authorizationUrl String?
+
+  // Status
+  status         TransactionStatus @default(PENDING)
+  paidAt        DateTime?
+  verifiedAt    DateTime?
+  metadata      Json?
+
+  createdAt     DateTime          @default(now())
+  updatedAt     DateTime          @updatedAt
+
+  // Relations
+  escrow       Escrow?
+
+  @@index([reference])
+  @@index([buyerId])
+  @@index([sellerId])
+  @@index([status])
+  @@map("transactions")
+}
+
+model Escrow {
+  id               String        @id @default(uuid())
+  transactionId    String        @unique
+  transaction      Transaction  @relation(fields: [transactionId], references: [id])
+  buyerId          String
+  buyer            User          @relation("BuyerEscrows", fields: [buyerId], references: [id])
+  sellerId         String
+  seller           User          @relation("SellerEscrows", fields: [sellerId], references: [id])
+  propertyId      String?
+  property        Property?     @relation(fields: [propertyId], references: [id], onDelete: SetNull)
+
+  // Escrow Details
+  amount          Decimal       @db.Decimal(15, 2)
+  platformFee     Decimal       @db.Decimal(15, 2) @default(0)
+  sellerAmount    Decimal       @db.Decimal(15, 2)
+
+  // Status
+  status          EscrowStatus  @default(PENDING)
+  fundedAt       DateTime?
+  releasedAt     DateTime?
+  refundedAt     DateTime?
+  disputedAt     DateTime?
+
+  // Admin Actions
+  approvedBy      String?
+  approvedAt     DateTime?
+  rejectionReason String?
+
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
+
+  @@index([status])
+  @@index([buyerId])
+  @@index([sellerId])
+  @@map("escrows")
+}
+
+// ==================== NOTIFICATIONS ====================
+
+model Notification {
+  id          String            @id @default(uuid())
+  userId      String
+  user        User              @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  // Content
+  type        NotificationType
+  title       String
+  message     String
+  data        Json?
+
+  // Status
+  status      NotificationStatus @default(PENDING)
+  read        Boolean            @default(false)
+  sentAt      DateTime?
+  readAt      DateTime?
+
+  createdAt   DateTime           @default(now())
+
+  @@index([userId])
+  @@index([status])
+  @@map("notifications")
+}
