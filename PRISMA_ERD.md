@@ -30,7 +30,7 @@ erDiagram
 
     Agent {
         String id PK
-        String userId FK_UK
+        String userId FK,UK
         String fullName
         String email
         String phone
@@ -54,7 +54,7 @@ erDiagram
 
     Kyc {
         String id PK
-        String userId FK_UK
+        String userId FK,UK
         String nin
         String bvn
         IdType idType
@@ -130,7 +130,7 @@ erDiagram
 
     Escrow {
         String id PK
-        String transactionId FK_UK
+        String transactionId FK,UK
         String buyerId FK
         String sellerId FK
         String propertyId FK
