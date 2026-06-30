@@ -267,10 +267,13 @@ Content-Type: application/json
   "amount": 500000,
   "email": "buyer@example.com",
   "type": "ESCROW_PAYMENT",
-  "propertyId": "property-uuid",
-  "sellerId": "agent-uuid"
+  "propertyId": "property-uuid"
 }
 ```
+
+For property payments, the seller is resolved from the property's agent owner.
+You can omit `sellerId` when `propertyId` is provided. If you do send it, it
+must match either the property's agent ID or the seller's user ID.
 
 ## Getting Started
 

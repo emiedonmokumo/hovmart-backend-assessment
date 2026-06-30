@@ -68,6 +68,8 @@ export class PaystackService {
     userId: string,
     dto: InitializePaymentDto,
   ): Promise<PaymentResponseDto> {
+    const sellerId = await this.resolveSellerId(userId, dto);
+
     if (dto.type === TransactionType.ESCROW_PAYMENT) {
       const kyc = await this.prisma.kyc.findUnique({
         where: { userId },
@@ -112,7 +114,7 @@ export class PaystackService {
             userId,
             type: dto.type,
             propertyId: dto.propertyId,
-            sellerId: dto.sellerId,
+            sellerId,
             ...dto.metadata,
           },
         },
@@ -124,7 +126,7 @@ export class PaystackService {
         data: {
           reference: data.reference,
           buyerId: userId,
-          sellerId: dto.sellerId,
+          sellerId,
           propertyId: dto.propertyId,
           type: dto.type as any,
           amount: dto.amount,
@@ -145,6 +147,71 @@ export class PaystackService {
       this.logger.error('Paystack initialization failed', error);
       throw new BadRequestException('Failed to initialize payment');
     }
+  }
+
+  private async resolveSellerId(
+    buyerId: string,
+    dto: InitializePaymentDto,
+  ): Promise<string | undefined> {
+    if (dto.propertyId) {
+      const property = await this.prisma.property.findUnique({
+        where: { id: dto.propertyId },
+        include: {
+          agent: {
+            select: {
+              id: true,
+              userId: true,
+            },
+          },
+        },
+      });
+
+      if (!property) {
+        throw new BadRequestException('Property not found');
+      }
+
+      const propertySellerId = property.agent.userId;
+      const propertyAgentId = property.agent.id;
+
+      if (
+        dto.sellerId &&
+        dto.sellerId !== propertySellerId &&
+        dto.sellerId !== propertyAgentId
+      ) {
+        throw new BadRequestException(
+          'sellerId does not match the property owner',
+        );
+      }
+
+      if (propertySellerId === buyerId) {
+        throw new BadRequestException('You cannot pay for your own property');
+      }
+
+      return propertySellerId;
+    }
+
+    if (!dto.sellerId) {
+      if (dto.type === TransactionType.ESCROW_PAYMENT) {
+        throw new BadRequestException('sellerId is required for escrow payments');
+      }
+
+      return undefined;
+    }
+
+    const seller = await this.prisma.user.findUnique({
+      where: { id: dto.sellerId },
+      select: { id: true },
+    });
+
+    if (!seller) {
+      throw new BadRequestException('Seller not found');
+    }
+
+    if (seller.id === buyerId) {
+      throw new BadRequestException('You cannot pay yourself');
+    }
+
+    return seller.id;
   }
 
   async verifyPayment(reference: string) {

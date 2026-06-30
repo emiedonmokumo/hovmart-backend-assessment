@@ -7,6 +7,7 @@ import {
   IsInt,
   Min,
   Max,
+  IsEnum,
 } from 'class-validator';
 
 export class AgentBasicProfileDto {
@@ -96,6 +97,7 @@ export class CreateAgentApplicationDto extends AgentBasicProfileDto {
 
 export class UpdateAgentStatusDto {
   @ApiProperty({ enum: ['APPROVED', 'REJECTED'] })
+  @IsEnum(['APPROVED', 'REJECTED'])
   status: 'APPROVED' | 'REJECTED';
 
   @ApiPropertyOptional({ example: 'Documents verified successfully' })

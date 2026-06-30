@@ -35,7 +35,11 @@ export class InitializePaymentDto {
   @IsString()
   propertyId?: string;
 
-  @ApiPropertyOptional({ example: 'agent-uuid' })
+  @ApiPropertyOptional({
+    example: 'seller-user-uuid',
+    description:
+      'Seller user ID. Omit this when propertyId is provided; if sent with propertyId, it may be either the property agent ID or seller user ID.',
+  })
   @IsOptional()
   @IsString()
   sellerId?: string;
